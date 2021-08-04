@@ -1,0 +1,15 @@
+<div *ngIf="posts.length > 0">
+  <ul *ngFor="let p of posts" class="posts_container">
+    <li class="post">
+      <strong class="post__username">{{p.user.first_name + " " + p.user.last_name | titlecase}}</strong>
+      <article class="post__body">{{p.body}}</article>
+      <small class="post__date" i18n>{{p.date | date}}</small>
+    </li>
+  </ul>
+</div>
+<div *ngIf="isLoading" class="nothing_posts__error" i18n>
+  <app-loader></app-loader>
+</div>
+<div *ngIf="posts.length === 0 && !isLoading" class="nothing_posts__error" i18n>
+  Nothing to show
+</div>

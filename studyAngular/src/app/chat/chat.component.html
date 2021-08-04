@@ -1,0 +1,83 @@
+<app-modal-window *ngIf="status && status === 'delete'" [header]="status.toUpperCase()" [status]="status" (onclose)="setComponentStatus()" (oncheck)="check()" (oncallback)="delete()"></app-modal-window>
+<app-call *ngIf="callIsOpen" (onexit)="exitCall()" [user]="user" [meetingName]="otherUser?.username || ''" [sid]="user?.id || -1"></app-call>
+<div aria-label="Chat" class="chat">
+    <div class="chat__header" aria-label="Chat header" *ngIf="chat && otherUser">
+        <div style="display: flex; flex-direction: column; align-items: center" *ngIf="selectedMessages.length == 0">
+            <div>{{otherUser.username}}</div>
+            <div>{{reader && user && reader.id !== user.id ? "writing..." : "online"}}</div>
+        </div>
+        <button class="form__button call_container__button" style="width: auto;height: auto;margin:0;padding: 5px 5px 0 5px;" (click)="call()">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" style="width: 23px;height: 23px">
+            <path 
+              [attr.fill]="'#6563ff'" 
+              d="M20,12a1,1,0,0,0-1-1H11.41l2.3-2.29a1,1,0,1,0-1.42-1.42l-4,4a1,1,0,0,0-.21.33,1,1,0,0,0,0,.76,1,1,0,0,0,.21.33l4,4a1,1,0,0,0,1.42,0,1,1,0,0,0,0-1.42L11.41,13H19A1,1,0,0,0,20,12ZM17,2H7A3,3,0,0,0,4,5V19a3,3,0,0,0,3,3H17a3,3,0,0,0,3-3V16a1,1,0,0,0-2,0v3a1,1,0,0,1-1,1H7a1,1,0,0,1-1-1V5A1,1,0,0,1,7,4H17a1,1,0,0,1,1,1V8a1,1,0,0,0,2,0V5A3,3,0,0,0,17,2Z"/>
+          </svg>
+        </button>
+        <div style="display: flex; flex-direction: row" *ngIf="selectedMessages.length > 0 && chat">
+            <div style="display: flex; flex-direction: row; align-items: center; justify-content: center">
+                <div style="font-size: 25px">{{"Selected " + selectedMessages.length + ' / ' + chat.chat_messages.length}}</div>
+                <div class="chat__header__button_group">
+                    <button *ngFor="let i of checkPossibleMethods()" (click)="setComponentStatus(i.status)">{{i.text}}</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="chat__body" aria-label="Chat body" *ngIf="chat" id="chatBody">
+        <ul class="chat__messages_container" #chatBody>
+            <ng-container *ngFor="let m of chat.chat_messages">
+                <li class="chat__messages_container__item" *ngIf="m.is_remove === false || (m.is_remove === null && m.user !== this.user?.id)" [ngClass]="{'chat__messages_container__item__left': otherUser && otherUser.id !== m.user, 'chat__messages_container__item__right': otherUser && otherUser.id === m.user, 'chat__messages_container__item__select': checkMessageIsSelect(m.id || -1)}"
+                    (click)="select(m.id || -1)">
+                    <div class="chat__messages_container__item__message">
+                        <div class="container chat__messages_container__item__reply_message" *ngIf="m.reply_to_message">
+                            <audio *ngIf="m.reply_to_message.audio_message" [src]="m.reply_to_message.audio_message.audio"></audio>
+                            <div>{{m.reply_to_message.body}}</div>
+                            <small>{{m.reply_to_message.date | date:"HH:mm"}}</small>
+                        </div>
+                        <app-audio-message *ngIf="m.audio_message" [src]="m.audio_message.audio"></app-audio-message>
+                        <div class="chat__messages_container__item__body">{{m.body}}</div>
+                        <small class="chat__messages_container__item__date">{{m.date | date:"HH:mm"}}</small>
+                    </div>
+                </li>
+            </ng-container>
+        </ul>
+    </div>
+    <div class="container row status_text_container" *ngIf="status === 'edit'">
+        <div>Редактирование сообщения</div>
+        <div style="font-size: 22px; cursor: pointer;" (click)="setComponentStatus()">&times;</div>
+    </div>
+    <div class="container row status_text_container" *ngIf="status === 'reply'">
+        <div>Ответить на сообщение</div>
+        <div style="font-size: 22px; cursor: pointer;" (click)="setComponentStatus()">&times;</div>
+    </div>
+    <form class="chat_form" (ngSubmit)="submit()" #chatForm="ngForm" aria-label="Chat footer">
+        <div class="chat_form__container">
+            <audio [src]="audio"></audio>
+            <div class="container row">
+                <div class="container">
+                    <input *ngIf="!status || status === 'reply'" class="chat__from_input" name="body" [(ngModel)]="message.body" (ngModelChange)="read()">
+                    <input *ngIf="status === 'edit'" class="chat__from_input" name="body" [(ngModel)]="editBody" (ngModelChange)="read()" style="border-radius: 0 0 10px 10px">
+                </div>
+                <div class="container row chat_form__buttons_container">
+                    <button type="button" (click)="startRecording()" *ngIf="!isRecording">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+              <path [attr.fill]="'#6563ff'"
+                    d="M12,15a4,4,0,0,0,4-4V5A4,4,0,0,0,8,5v6A4,4,0,0,0,12,15ZM10,5a2,2,0,0,1,4,0v6a2,2,0,0,1-4,0Zm10,6a1,1,0,0,0-2,0A6,6,0,0,1,6,11a1,1,0,0,0-2,0,8,8,0,0,0,7,7.93V21H9a1,1,0,0,0,0,2h6a1,1,0,0,0,0-2H13V18.93A8,8,0,0,0,20,11Z"/>
+            </svg>
+          </button>
+                    <button type="button" *ngIf="isRecording" (click)="stopRecording()">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="30" height="30">
+              <path [attr.fill]="'#6563ff'"
+                    [attr.d]="'M18.71,7.21a1,1,0,0,0-1.42,0L9.84,14.67,6.71,11.53A1,1,0,1,0,5.29,13l3.84,3.84a1,1,0,0,0,1.42,0l8.16-8.16A1,1,0,0,0,18.71,7.21Z'"/>
+            </svg>
+          </button>
+                    <button (click)="resetRecording()" type="button" *ngIf="isRecording">&times;</button>
+                </div>
+                <button class="form__button chat_form__button">{{isLoading ? "Loading..." : "Send"}}</button>
+            </div>
+        </div>
+    </form>
+    <div *ngIf="status === 'reply'" class="container reply_message_container">
+        <div>{{selectedMessages[0].body}}</div>
+        <small>{{selectedMessages[0].date | date:"HH:mm"}}</small>
+    </div>
+</div>

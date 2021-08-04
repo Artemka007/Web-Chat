@@ -1,0 +1,25 @@
+<form class="form" #loginForm="ngForm" (ngSubmit)="submit(loginForm)">
+  <span class="error" style="border-radius: 0 0 10px 10px" *ngIf="errors  && errors.__all__">{{errors.__all__[0]}}</span>
+  <div class="form__title" i18n>{{"Login"}}</div>
+  <div class="form__item__container">
+    <input class="form__item" placeholder="Username" name="username" [(ngModel)]="username" required #name="ngModel">
+    <span class="error" *ngIf="name.invalid && (name.dirty || name.touched)">
+      <div *ngIf="name.errors?.required" i18n>
+        Username is required.
+      </div>
+    </span>
+  </div>
+  <div class="form__item__container">
+    <input class="form__item" placeholder="Password" name="password" [(ngModel)]="password" required type="password" #passwordField="ngModel">
+    <span class="error" *ngIf="passwordField.invalid && (passwordField.dirty || passwordField.touched)">
+      <div *ngIf="passwordField.errors?.required" i18n>
+        Password is required.
+      </div>
+    </span>
+  </div>
+  <button class="form__button" [disabled]="loginForm.invalid || isLoading" i18n *ngIf="!isLoading">{{"Login"}}</button>
+  <button class="form__button" [disabled]="true" i18n *ngIf="isLoading"><app-loader></app-loader></button>
+  <div>
+    <a routerLink="/register">Зарегистрироваться</a>
+  </div>
+</form>
