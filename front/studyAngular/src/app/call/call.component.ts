@@ -1,4 +1,6 @@
-import {AfterContentInit, AfterViewInit, Component, ElementRef, EventEmitter, Input, OnInit, Output, ViewChild} from '@angular/core';
+import {AfterContentInit, AfterViewInit, Component, ElementRef, EventEmitter, Input, OnInit, Output, QueryList, ViewChild, ViewChildren} from '@angular/core';
+import { interval } from 'rxjs';
+import { take, takeWhile } from 'rxjs/operators';
 import { IUser } from '../models/account.model';
 import {ChatService} from "../services/chat.service";
 
@@ -8,7 +10,10 @@ import {ChatService} from "../services/chat.service";
   styleUrls: ['./call.component.css']
 })
 export class CallComponent implements OnInit, AfterViewInit {
-  @ViewChild("localVideo", {static: false}) localVideo?: ElementRef<HTMLVideoElement>
+  @ViewChild("localVideo", {static: false}) localVideo!: ElementRef<HTMLVideoElement>
+  @ViewChild("videoCanvas", {static: false}) videoCanvas!: ElementRef<HTMLCanvasElement>
+  @ViewChildren("remoteVideos") remoteVideos: QueryList<ElementRef<HTMLVideoElement>> = new QueryList<ElementRef<HTMLVideoElement>>()
+  @ViewChildren("remoteVideoCanvases") remoteVideoCanvases: QueryList<ElementRef<HTMLCanvasElement>> = new QueryList<ElementRef<HTMLCanvasElement>>()
 
   private remotePeers: { [sid: number]: RTCPeerConnection } = {}
   private gainNode?: GainNode
@@ -28,29 +33,43 @@ export class CallComponent implements OnInit, AfterViewInit {
   localStream?: MediaStream
   remoteStreams: { id: number, username: string, stream: MediaStream }[] = []
   lastStreamId: string = ''
+  volumeCoordinates: {x: number, y: number} = {x: 0, y: 0}
+  videoCoordinates: {x: number, y: number} = {x: 0, y: 0}
+  changeVolumeIsOpen: boolean = false
+  chooseVideoEffectIsOpen: boolean = false
+  volumeValue: number = 1
 
   constructor(private _chatService: ChatService) {
   }
 
   ngOnInit(): void {
+    this.volumeValue = parseFloat(localStorage.getItem("volume") || "1")
   }
 
   ngAfterViewInit() {
+    this.remoteVideoCanvases.changes.subscribe(_ => {
+      let video: HTMLVideoElement = this.remoteVideos.last.nativeElement,
+          id: number              = this.remoteVideos.length - 1
+      interval(250).pipe(take(1)).subscribe(() => {
+        this.drawVideoIntoCanvas(video, id)
+        video.style.display = "none"
+      })
+    })
     this._chatService.connectToCalls()
     this.callHandle()
     this._chatService.calls.next({event: "call-connect", sid: this.sid, data: {}})
   }
 
-  callHandle() {
-    if (this.localVideo) {
-      this.getUserMediaStream({audio: !this.audioEnabled, video: !this.videoEnabled}).then(() => {
-        this.localVideo!.nativeElement.play().catch(e => {
-          console.log(e.message)
-        })
+  public callHandle() {
+    this.getUserMediaStream({audio: !this.audioEnabled, video: !this.videoEnabled}).then((s) => {
+      this.localVideo!.nativeElement.play().then(() => {
+        this.localVideo!.nativeElement.volume = 0
       }).catch(e => {
         console.log(e.message)
       })
-    }
+    }).catch(e => {
+      console.log(e.message)
+    })
     this.call().then(() => {
       this._chatService.calls.subscribe(async data => {
         await this.subscribeToWSConnection(data)
@@ -58,17 +77,17 @@ export class CallComponent implements OnInit, AfterViewInit {
     })
   }
 
-  stopCall(sid?: number) {
+  public stopCall(sid?: number) {
     if (!sid) {
       this._chatService.calls.next({event: "call-disconnect", sid: this.sid, data: {}})
     }
     this.remotePeers[sid || this.sid].close()
     if(!sid) {
+      if(this.localVideo) this.localVideo.nativeElement.srcObject = null
       this.localStream?.getTracks().forEach(t => {
         t.stop()
       })
       this.onexit.emit()
-      if(this.localVideo) this.localVideo.nativeElement.srcObject = null
     }
     else {
       let r = this.remoteStreams
@@ -81,68 +100,91 @@ export class CallComponent implements OnInit, AfterViewInit {
     }
   }
 
-  setEnabled(stream: "audio" | "video", enabled: boolean) {
-    this.enable(stream, enabled)
+  public changeVolume(value: number) {
+    if(this.gainNode) {
+      this.gainNode.gain.value = value
+    }
   }
 
-  private enable(stream: "audio" | "video", enabled: boolean) {
-    const isAllEnabled = (stream === "audio" && this.videoEnabled && enabled) || (stream === "video" && this.audioEnabled && enabled)
+  public hoverToChangeVolume(e: MouseEvent) {
+    //@ts-ignore
+    this.volumeCoordinates = {x: e.currentTarget.offsetLeft + 75, y: e.currentTarget.offsetTop - 20}
+    this.changeVolumeIsOpen = !this.changeVolumeIsOpen
+  }
 
-    if (this.localStream) {
-      if (!isAllEnabled) {
-        if(stream === "audio") this.audioEnabled = enabled
-        else if (stream === "video") this.videoEnabled = enabled
-      } else {
-        this.audioEnabled = true
-        this.videoEnabled = true
-      }
-      this.getUserMediaStream({video: !this.videoEnabled, audio: isAllEnabled ? true : !this.audioEnabled}).then((s) => {
-        if (isAllEnabled) {
-          this.localStream!.getTracks().forEach(t => {
-            t.stop()
-          })
-        }
-        this.localVideo!.nativeElement.srcObject = this.localStream!
-        this.call().catch(e => {
-          console.log(e.name + '\n' + e.message)
-        })
-      }).catch(e => {
-        console.log(e.name + '\n' + e.message)
+  public hoverToChooseVideoEffect(e: MouseEvent) {
+    //@ts-ignore
+    this.videoCoordinates = {x: e.currentTarget.offsetLeft + 75, y: e.currentTarget.offsetTop - 20}
+    this.chooseVideoEffectIsOpen = !this.chooseVideoEffectIsOpen
+  }
+
+  public onfilter(filter:string) {
+    let c = this.videoCanvas.nativeElement.getContext("2d")
+    if(c) c.filter = filter
+    this._chatService.calls.next({"event": "change-video-filter", "sid": this.sid, "data": {filter}})
+  }
+
+  private async getUserMediaStream(mediaConstrains: MediaStreamConstraints): Promise<MediaStream> {
+    const stream = await navigator.mediaDevices.getUserMedia(mediaConstrains),
+          audioContext = new AudioContext(),
+          audioSource = audioContext.createMediaStreamSource(stream),
+          audioDestination = audioContext.createMediaStreamDestination()
+    let currentVolume = localStorage.getItem("volume")
+    if (!currentVolume) {
+      localStorage.setItem("volume", "1")
+      currentVolume = "1"
+      console.log(localStorage)
+    }
+    this.gainNode = audioContext.createGain()
+    audioSource.connect(this.gainNode)
+    this.gainNode.connect(audioDestination)
+    stream.removeTrack(stream.getAudioTracks()[0])
+    stream.addTrack(audioDestination.stream.getAudioTracks()[0])
+    this.gainNode.gain.value = parseFloat(currentVolume)
+    this.localStream = stream
+    this.localVideo!.nativeElement.srcObject = this.localStream
+    this.localVideo.nativeElement.onplay = (e) => {
+      let lv = this.localVideo.nativeElement
+      interval(100).pipe(take(1)).subscribe(() => {
+        this.drawVideoIntoCanvas(lv)
+      })
+    }
+    return stream
+  }
+
+  private drawVideoIntoCanvas(video: HTMLVideoElement, id?:number) {
+    let canvas = id !== undefined ? this.remoteVideoCanvases.toArray()[id].nativeElement : this.videoCanvas.nativeElement,
+        context = canvas.getContext('2d'),
+        mediaWidth = video.offsetWidth,
+        mediaHeight = video.offsetHeight
+    canvas.width = mediaWidth
+    canvas.height = mediaHeight
+    canvas.style.width = mediaWidth + "px"
+    canvas.style.height = mediaHeight + "px"
+    this.draw(video, context, mediaWidth, mediaHeight)
+  }
+
+  /**
+   * Drawing video into canvas with any filters
+   * @param v video element for draw into canvas
+   * @param c canvas element
+   * @param w width of video element for set to canvas
+   * @param h height of video element for set to canvas
+   */
+  private draw(v:HTMLVideoElement, c:CanvasRenderingContext2D | null, w:number, h:number) {
+    if(c) {
+      c.drawImage(v, 0, 0, w, h)
+      if(!this.videoEnabled) interval(1000 / 24).pipe(take(1)).subscribe(() => {
+        this.draw(v, c, w, h)
       })
     }
   }
 
-  private async getUserMediaStream(mediaConstrains: MediaStreamConstraints): Promise<MediaStream> {
-    const isStart = !!this.localStream
-    const stream = await navigator.mediaDevices.getUserMedia(mediaConstrains)
-
-    let audioContext = new AudioContext()
-    this.gainNode = audioContext.createGain()
-    let audioSource = audioContext.createMediaStreamSource(stream)
-    let audioDestination = audioContext.createMediaStreamDestination()
-    audioSource.connect(this.gainNode)
-    this.gainNode.connect(audioDestination)
-
-    stream.removeTrack(stream.getAudioTracks()[0])
-    stream.addTrack(audioDestination.stream.getAudioTracks()[0])
-
-    console.log(stream.getAudioTracks())
-
-    this.gainNode.gain.value = 0
-
-    this.localStream = stream
-    this.localVideo!.nativeElement.srcObject = this.localStream
-    isStart && this.localVideo!.nativeElement.play()
-    return stream
-  }
-
   private async call(): Promise<void> {
-    
-
     !this.remotePeers[this.sid] && this.createPeerConnection()
 
     if (this.localStream && this.remotePeers[this.sid]) {
-      this.localStream.getTracks().length > 0 && this.localStream.getTracks().forEach(track => {
+      this.localStream.getTracks().length && this.localStream.getTracks().forEach(track => {
         this.remotePeers[this.sid]?.addTrack(track, this.localStream!)
         console.log({track})
       })
@@ -188,26 +230,11 @@ export class CallComponent implements OnInit, AfterViewInit {
       })
       this.remoteStreams.push({id: this.otherSid, username: this.user?.username || "", stream: mediaStream})
     }
-    peer.onconnectionstatechange = (e) => {
+    peer.onsignalingstatechange = e => {
+      
+      console.log(this.remotePeers[this.sid].signalingState)
     }
     return peer
-  }
-
-  private async offerHandle(data: any) {
-    if (data.sid !== this.sid) {
-      this.otherSid = data.sid
-      if (!this.remotePeers[data.sid]) this.remotePeers[data.sid] = this.setPeerCallbacks(new RTCPeerConnection({'iceServers': [{'urls': 'stun:stun.l.google.com:19302'}]}), data.sid)
-      this.remotePeers[data.sid].setRemoteDescription(new RTCSessionDescription(data.data)).then(async () => {
-        const answer = await this.remotePeers[data.sid].createAnswer()
-        await this.remotePeers[data.sid].setLocalDescription(answer)
-        this._chatService.calls.next({
-          event: 'answer',
-          sid: data.sid,
-          data: answer
-        })
-      })
-    }
-    this.otherSids.push(data.sid)
   }
 
   private async subscribeToWSConnection(data: any) {
@@ -221,12 +248,25 @@ export class CallComponent implements OnInit, AfterViewInit {
         break
       }
       case "offer": {
-        await this.offerHandle(data)
+        if (data.sid !== this.sid) {
+          this.otherSid = data.sid
+          if (!this.remotePeers[data.sid]) this.remotePeers[data.sid] = this.setPeerCallbacks(new RTCPeerConnection({'iceServers': [{urls: 'stun:stun.l.google.com:19302'}]}), data.sid)
+          this.remotePeers[data.sid].setRemoteDescription(new RTCSessionDescription(data.data)).then(async () => {
+            const answer = await this.remotePeers[data.sid].createAnswer()
+            await this.remotePeers[data.sid].setLocalDescription(answer)
+            this._chatService.calls.next({
+              event: 'answer',
+              sid: data.sid,
+              data: answer
+            })
+          })
+        }
+        this.otherSids.push(data.sid)
         break
       }
       case 'ice-candidate': {
         // add ICE candidate to added peer conection
-        await this.remotePeers[data.sid]?.addIceCandidate(new RTCIceCandidate(data.data)).catch(e => {
+        this.remotePeers[data.sid]?.addIceCandidate(new RTCIceCandidate(data.data)).catch(e => {
           console.log(e.name + '\n' + e.message)
         })
         break
@@ -240,9 +280,48 @@ export class CallComponent implements OnInit, AfterViewInit {
         }
         break
       }
+      case "change-video-filter": {
+        let c = document.getElementById(data.sid)
+        if (c) {
+          //@ts-ignore
+          let context = c.getContext('2d')
+          context.filter = data.data.filter
+        }
+        break
+      }
       default:
         console.log("ERROR! Unresolved event")
     }
   }
 
+  public setEnabled(stream: "audio" | "video", enabled: boolean) {
+    this.enable(stream, enabled)
+  }
+
+  private enable(stream: "audio" | "video", enabled: boolean) {
+    const isAllEnabled = (stream === "audio" && this.videoEnabled && enabled) || (stream === "video" && this.audioEnabled && enabled)
+
+    if (this.localStream) {
+      if (!isAllEnabled) {
+        if(stream === "audio") this.audioEnabled = enabled
+        else if (stream === "video") this.videoEnabled = enabled
+      } else {
+        this.audioEnabled = true
+        this.videoEnabled = true
+      }
+      this.getUserMediaStream({video: !this.videoEnabled, audio: isAllEnabled ? true : !this.audioEnabled}).then((s) => {
+        this.localStream!.getTracks().forEach(t => {
+          if(isAllEnabled) t.stop()
+          else t.kind === stream && enabled && t.stop()
+        })
+        this.localVideo.nativeElement.srcObject = this.localStream!
+        
+        this.call().catch(e => {
+          console.log(e.name + '\n' + e.message)
+        })
+      }).catch(e => {
+        console.log(e.name + '\n' + e.message)
+      })
+    }
+  }
 }

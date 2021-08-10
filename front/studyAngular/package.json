@@ -6,9 +6,8 @@
         "start": "ng serve",
         "build": "ng build",
         "watch": "ng build --watch --configuration development",
-        "compile": "protoc --plugin=protoc-gen-ts=\"C:\\Users\\Пользователь\\webstormProjects\\studyAngular\\node_modules\\.bin\\protoc-gen-ts.cmd\"       --js_out=\"import_style=commonjs,binary:src/app/gen\"      --ts_out=\"service=grpc-web:src/app/gen\" src/app/account/account.proto",
         "test": "ng test",
-        "gen": "ng generate component change-call-volume"
+        "gen": "ng generate component choose-video-effects"
     },
     "private": true,
     "dependencies": {
@@ -22,12 +21,9 @@
         "@angular/router": "~12.1.0",
         "@improbable-eng/grpc-web": "^0.14.0",
         "google-protobuf": "^3.17.3",
-        "grpc": "^1.24.10",
         "ng-audio-recorder": "0.0.5",
         "peerjs": "^1.3.2",
-        "protoc": "^1.0.4",
         "rxjs": "~6.6.0",
-        "ts-protoc-gen": "^0.15.0",
         "tslib": "^2.2.0",
         "zone.js": "~0.11.4"
     },

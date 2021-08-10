@@ -1,3 +1,7 @@
-<div class="change_call_volume_container" [style]="{position: 'absolute', top: top, left: left}">
-
+<div class="change_call_volume_container" [style]="{position: 'absolute', top: coordinates['y'] + 'px', right: coordinates['x'] + 'px', zIndex: 2000}" (mouseup)="mouseup($event)" (mousemove)="mousemove($event)">
+    <div style="font-size: 20px;color: #fff">{{"Микрофон"}}</div>
+    <svg xmlns="http://www.w3.org/2000/svg" class="change_call_volume__slider">
+        <line [attr.x1]="4" [attr.x2]="296" [attr.y1]="8" [attr.y2]="8" [attr.stroke]="'#fff'" class="change_call_volume__slider__value" stroke-linecap="round"/>
+        <circle #changeVolumeCircle id="changeVolumeCircle" class="change_call_volume__slider__circle" [attr.r]="8" [attr.cx]="left" [attr.cy]="8" (mousedown)="mousedown($event)"/>
+    </svg>
 </div>

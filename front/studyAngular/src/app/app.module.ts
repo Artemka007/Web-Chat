@@ -20,8 +20,8 @@ import {NgAudioRecorderModule} from "ng-audio-recorder";
 import { AudioMessageComponent } from './audio-message/audio-message.component';
 import { UploadFilesComponent } from './upload-files/upload-files.component';
 import { CallComponent } from './call/call.component';
-import { TakeCallComponent } from './take-call/take-call.component';
 import { ChangeCallVolumeComponent } from './change-call-volume/change-call-volume.component';
+import { ChooseVideoEffectsComponent } from './choose-video-effects/choose-video-effects.component';
 
 @NgModule({
   declarations: [
@@ -38,9 +38,8 @@ import { ChangeCallVolumeComponent } from './change-call-volume/change-call-volu
     AudioMessageComponent,
     UploadFilesComponent,
     CallComponent,
-    TakeCallComponent,
     ChangeCallVolumeComponent,
-
+    ChooseVideoEffectsComponent,
   ],
   imports: [
     BrowserModule,

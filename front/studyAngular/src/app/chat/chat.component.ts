@@ -194,6 +194,7 @@ export class ChatComponent implements OnInit, AfterViewInit {
     this.isRecording = false
     this._audioRecorderService.stopRecording(OutputFormat.WEBM_BLOB).then((output) => {
       let f = new FormData()
+      //@ts-ignore
       f.append('audio', output)
       this._chatService.uploadAudioMessage(f).subscribe(data => {
         console.log(data)

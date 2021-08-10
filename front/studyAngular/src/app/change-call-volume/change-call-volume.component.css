@@ -1,0 +1,21 @@
+.change_call_volume__slider {
+    display: flex;
+    flex-direction: column;
+    width: 300px;
+    height: 16px;
+}
+
+.change_call_volume__slider {
+    stroke-width: 8px;
+}
+
+.change_call_volume_container {
+    padding: 40px;
+    border-radius: 30px;
+    background: rgb(7, 5, 156);
+}
+
+.change_call_volume__slider__circle {
+    fill: rgb(0, 178, 209);
+    cursor: pointer;
+}

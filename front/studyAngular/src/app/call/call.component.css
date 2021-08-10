@@ -52,11 +52,19 @@
     background: linear-gradient(to top, rgb(255, 41, 41), rgb(255, 83, 83));
 }
 
-.call_container video {
+.call_container__video {
     display: flex;
-    background: rgb(2, 4, 39);
-    height: calc(100% - 46px);
+    flex-direction: row;
+    justify-content: center;
     width: 100%;
+    height: calc(100% - 46px);
+    background: rgb(2, 4, 39);
+}
+
+.call_container__video video {
+    display: flex;
+    height: 100%;
+    width: auto;
 }
 
 .call_container__manage_panel {
