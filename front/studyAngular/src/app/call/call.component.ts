@@ -108,14 +108,20 @@ export class CallComponent implements OnInit, AfterViewInit {
 
   public hoverToChangeVolume(e: MouseEvent) {
     //@ts-ignore
-    this.volumeCoordinates = {x: e.currentTarget.offsetLeft + 75, y: e.currentTarget.offsetTop - 20}
-    this.changeVolumeIsOpen = !this.changeVolumeIsOpen
+    let ct = e.currentTarget[0]
+    if(ct) {
+      this.volumeCoordinates = {x: ct.offsetLeft + 75, y: ct.offsetTop - 20}
+      this.changeVolumeIsOpen = !this.changeVolumeIsOpen
+    }
   }
 
   public hoverToChooseVideoEffect(e: MouseEvent) {
     //@ts-ignore
-    this.videoCoordinates = {x: e.currentTarget.offsetLeft + 75, y: e.currentTarget.offsetTop - 20}
-    this.chooseVideoEffectIsOpen = !this.chooseVideoEffectIsOpen
+    let ct = e.currentTarget[0]
+    if(ct) {
+      this.videoCoordinates = {x: ct.offsetLeft + 75, y: ct.offsetTop - 20}
+      this.chooseVideoEffectIsOpen = !this.chooseVideoEffectIsOpen
+    }
   }
 
   public onfilter(filter:string) {

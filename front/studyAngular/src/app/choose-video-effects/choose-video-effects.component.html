@@ -1,0 +1,14 @@
+<div class="choose_video_effects" [style]="{'top': coordinates['y'] + 'px', 'right': coordinates['x'] + 'px'}" #container>
+    <div class="choose_video_effects__video_effect_container" (click)="click('none')">
+        <canvas #normalCanvas></canvas>
+        <span>Normal</span>
+    </div>
+    <div class="choose_video_effects__video_effect_container" (click)="click('sepia()')">
+        <canvas #sepiaCanvas></canvas>
+        <span>Sepia</span>
+    </div>
+    <div class="choose_video_effects__video_effect_container" (click)="click('grayscale()')">
+        <canvas #grayscaleCanvas></canvas>
+        <span>Grayscale</span>
+    </div>
+</div>
