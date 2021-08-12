@@ -1,4 +1,5 @@
-import { TestBed } from '@angular/core/testing';
+import { getTestBed, TestBed } from '@angular/core/testing';
+import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 
 import { ChatService } from './chat.service';
 
@@ -6,7 +7,9 @@ describe('ChatService', () => {
   let service: ChatService;
 
   beforeEach(() => {
-    TestBed.configureTestingModule({});
+    TestBed.configureTestingModule({
+      imports: [HttpClientTestingModule],
+    });
     service = TestBed.inject(ChatService);
   });
 

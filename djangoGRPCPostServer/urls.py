@@ -16,7 +16,6 @@ urlpatterns = [
     path('all_chats', views.index),
     path('admin/', admin.site.urls),
     path('api/1.0/', include('account.urls')),
-    path('api/1.0/', include('RESTaccount.urls')),
     path('api/1.0/', include('posts.urls')),
     path('api/1.0/', include('chat.urls')),
 ] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

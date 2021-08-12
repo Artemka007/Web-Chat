@@ -77,29 +77,6 @@ export class CallComponent implements OnInit, AfterViewInit {
     })
   }
 
-  public stopCall(sid?: number) {
-    if (!sid) {
-      this._chatService.calls.next({event: "call-disconnect", sid: this.sid, data: {}})
-    }
-    this.remotePeers[sid || this.sid].close()
-    if(!sid) {
-      if(this.localVideo) this.localVideo.nativeElement.srcObject = null
-      this.localStream?.getTracks().forEach(t => {
-        t.stop()
-      })
-      this.onexit.emit()
-    }
-    else {
-      let r = this.remoteStreams
-      const el = r.find(i => i.id === sid)
-      if (el) {
-        const id = r.indexOf(el)
-        r.splice(id, 1)
-        this.remoteStreams = r
-      }
-    }
-  }
-
   public changeVolume(value: number) {
     if(this.gainNode) {
       this.gainNode.gain.value = value
@@ -108,20 +85,14 @@ export class CallComponent implements OnInit, AfterViewInit {
 
   public hoverToChangeVolume(e: MouseEvent) {
     //@ts-ignore
-    let ct = e.currentTarget[0]
-    if(ct) {
-      this.volumeCoordinates = {x: ct.offsetLeft + 75, y: ct.offsetTop - 20}
-      this.changeVolumeIsOpen = !this.changeVolumeIsOpen
-    }
+    this.volumeCoordinates = {x: e.currentTarget.offsetLeft + 75, y: e.currentTarget.offsetTop - 20}
+    this.changeVolumeIsOpen = !this.changeVolumeIsOpen
   }
 
   public hoverToChooseVideoEffect(e: MouseEvent) {
     //@ts-ignore
-    let ct = e.currentTarget[0]
-    if(ct) {
-      this.videoCoordinates = {x: ct.offsetLeft + 75, y: ct.offsetTop - 20}
-      this.chooseVideoEffectIsOpen = !this.chooseVideoEffectIsOpen
-    }
+    this.videoCoordinates = {x: e.currentTarget.offsetLeft + 75, y: e.currentTarget.offsetTop - 20}
+    this.chooseVideoEffectIsOpen = !this.chooseVideoEffectIsOpen
   }
 
   public onfilter(filter:string) {
@@ -151,6 +122,7 @@ export class CallComponent implements OnInit, AfterViewInit {
     this.localVideo!.nativeElement.srcObject = this.localStream
     this.localVideo.nativeElement.onplay = (e) => {
       let lv = this.localVideo.nativeElement
+      // todo: fix this bug with interval because video is very big without it
       interval(100).pipe(take(1)).subscribe(() => {
         this.drawVideoIntoCanvas(lv)
       })
@@ -213,34 +185,34 @@ export class CallComponent implements OnInit, AfterViewInit {
   }
 
   private setPeerCallbacks(peer: RTCPeerConnection, sid: number) {
-    peer.onicecandidate = (e) => {
-      if (e.candidate) {
-        this._chatService.calls.next({
-          event: 'ice-candidate',
-          data: e.candidate,
-          sid: sid
-        })
-      }
-    }
-    peer.ontrack = (e) => {
-      const mediaStream = e.streams[0]
-      if (e.streams[0].id === this.lastStreamId) {
-        let s = this.remoteStreams.find(i => i.stream.id === this.lastStreamId)
-        s && this.remoteStreams.splice(this.remoteStreams.indexOf(s), 1)
-      } else {
-        this.lastStreamId = e.streams[0].id
-      }
-      this.otherSids.forEach(id => {
-        const s = this.remoteStreams.find(i => i.id === id)
-        s && this.remoteStreams.splice(this.remoteStreams.indexOf(s), 1)
-      })
-      this.remoteStreams.push({id: this.otherSid, username: this.user?.username || "", stream: mediaStream})
-    }
-    peer.onsignalingstatechange = e => {
-      
-      console.log(this.remotePeers[this.sid].signalingState)
-    }
+    peer.onicecandidate = (e) => { this.iceCandidateHandle(e,sid) }
+    peer.ontrack = (e) => { this.trackHandle(e) }
     return peer
+  }
+
+  private iceCandidateHandle(e: RTCPeerConnectionIceEvent, sid:number) {
+    if (e.candidate) {
+      this._chatService.calls.next({
+        event: 'ice-candidate',
+        data: e.candidate,
+        sid: sid
+      })
+    }
+  }
+
+  private trackHandle(e: RTCTrackEvent) {
+    const mediaStream = e.streams[0]
+    if (e.streams[0].id === this.lastStreamId) {
+      let s = this.remoteStreams.find(i => i.stream.id === this.lastStreamId)
+      s && this.remoteStreams.splice(this.remoteStreams.indexOf(s), 1)
+    } else {
+      this.lastStreamId = e.streams[0].id
+    }
+    this.otherSids.forEach(id => {
+      const s = this.remoteStreams.find(i => i.id === id)
+      s && this.remoteStreams.splice(this.remoteStreams.indexOf(s), 1)
+    })
+    this.remoteStreams.push({id: this.otherSid, username: this.user?.username || "", stream: mediaStream})
   }
 
   private async subscribeToWSConnection(data: any) {
@@ -250,24 +222,11 @@ export class CallComponent implements OnInit, AfterViewInit {
         break
       }
       case "call-disconnect": {
-        this.stopCall(data.sid)
+        this.callDisconnectHandle(data.sid)
         break
       }
       case "offer": {
-        if (data.sid !== this.sid) {
-          this.otherSid = data.sid
-          if (!this.remotePeers[data.sid]) this.remotePeers[data.sid] = this.setPeerCallbacks(new RTCPeerConnection({'iceServers': [{urls: 'stun:stun.l.google.com:19302'}]}), data.sid)
-          this.remotePeers[data.sid].setRemoteDescription(new RTCSessionDescription(data.data)).then(async () => {
-            const answer = await this.remotePeers[data.sid].createAnswer()
-            await this.remotePeers[data.sid].setLocalDescription(answer)
-            this._chatService.calls.next({
-              event: 'answer',
-              sid: data.sid,
-              data: answer
-            })
-          })
-        }
-        this.otherSids.push(data.sid)
+        this.offerHandle(data)
         break
       }
       case 'ice-candidate': {
@@ -300,6 +259,46 @@ export class CallComponent implements OnInit, AfterViewInit {
     }
   }
 
+  private offerHandle(data: any) {
+    if (data.sid !== this.sid) {
+      this.otherSid = data.sid
+      if (!this.remotePeers[data.sid]) this.remotePeers[data.sid] = this.setPeerCallbacks(new RTCPeerConnection({'iceServers': [{urls: 'stun:stun.l.google.com:19302'}]}), data.sid)
+      this.remotePeers[data.sid].setRemoteDescription(new RTCSessionDescription(data.data)).then(async () => {
+        const answer = await this.remotePeers[data.sid].createAnswer()
+        await this.remotePeers[data.sid].setLocalDescription(answer)
+        this._chatService.calls.next({
+          event: 'answer',
+          sid: data.sid,
+          data: answer
+        })
+      })
+    }
+    this.otherSids.push(data.sid)
+  }
+
+  public callDisconnectHandle(sid?: number) {
+    if (!sid) {
+      this._chatService.calls.next({event: "call-disconnect", sid: this.sid, data: {}})
+    }
+    this.remotePeers[sid || this.sid].close()
+    if(!sid) {
+      if(this.localVideo) this.localVideo.nativeElement.srcObject = null
+      this.localStream?.getTracks().forEach(t => {
+        t.stop()
+      })
+      this.onexit.emit()
+    }
+    else {
+      let r = this.remoteStreams
+      const el = r.find(i => i.id === sid)
+      if (el) {
+        const id = r.indexOf(el)
+        r.splice(id, 1)
+        this.remoteStreams = r
+      }
+    }
+  }
+
   public setEnabled(stream: "audio" | "video", enabled: boolean) {
     this.enable(stream, enabled)
   }
@@ -321,10 +320,7 @@ export class CallComponent implements OnInit, AfterViewInit {
           else t.kind === stream && enabled && t.stop()
         })
         this.localVideo.nativeElement.srcObject = this.localStream!
-        
-        this.call().catch(e => {
-          console.log(e.name + '\n' + e.message)
-        })
+        this.call()
       }).catch(e => {
         console.log(e.name + '\n' + e.message)
       })

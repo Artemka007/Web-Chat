@@ -5,5 +5,4 @@ class AddAcceptRangesMiddleware:
     def __call__(self, request):
         response = self.get_response(request)
         response['Accept-Ranges'] = 'bytes'
-        response['Access-Control-Allow-Origin'] = '*'
         return response

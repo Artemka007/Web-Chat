@@ -4,7 +4,7 @@ from django.shortcuts import render
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from RESTaccount.serializer import UserSerializer
+from .serializer import UserSerializer
 from account.forms import SignUpForm
 
 

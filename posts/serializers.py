@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from RESTaccount.serializer import UserSerializer
+from account.serializer import UserSerializer
 from posts.models import Post
 
 

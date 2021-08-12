@@ -9,7 +9,6 @@ export class WebsocketsService {
   constructor(private subject: Subject<MessageEvent>) { }
 
   public connect(url: string): Subject<MessageEvent> {
-    console.log("Connecting...")
     if (!this.subject.observers.length) {
       this.subject = this.create(url)
     }
@@ -18,9 +17,7 @@ export class WebsocketsService {
 
   private create(url: string): Subject<MessageEvent> {
     let ws = new WebSocket(url)
-
-
-    let observable = Observable.create((obs: Observer<MessageEvent>) => {
+    let observable = new Observable((obs: Observer<MessageEvent>) => {
       ws.onmessage = obs.next.bind(obs)
       ws.onerror = obs.error.bind(obs)
       ws.onclose = obs.error.bind(obs)
@@ -39,7 +36,7 @@ export class WebsocketsService {
         }
       }
     }
-
+    let subject = new Subject()
     return Subject.create(observer, observable)
   }
 }

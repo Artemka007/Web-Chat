@@ -1,6 +1,6 @@
 import rest_framework.serializers as serializers
 
-from RESTaccount.serializer import UserSerializer
+from account.serializer import UserSerializer
 from chat.models import Chat, Message, AudioForMessage
 
 

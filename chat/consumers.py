@@ -4,7 +4,7 @@ import json
 from asgiref.sync import sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 
-from RESTaccount.serializer import UserSerializer
+from account.serializer import UserSerializer
 from chat.models import Chat, Message
 from chat.serializers import ChatSerializer, MessageSerializer, CreateMessageSerializer
 import random
@@ -56,6 +56,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
         return Message.objects.filter(pk=pk)
 
     @sync_to_async
+    def forward_message(self, message_pk:int, message_body:str, chat_pk:int):
+        message = Message.objects.create()
+
+    @sync_to_async
     def reply_to_message(self, message: dict, pk: int):
         reply_to_message = Message.objects.get(pk=pk)
         m = MessageSerializer(data=message)
@@ -87,9 +91,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
     async def receive(self, text_data=None, bytes_data=None):
         if not self.scope['user']:
             await self.disconnect(401)
-
         data = json.loads(text_data)
-
         if data['event'] == 'get_chat':
             @sync_to_async
             def get_chat():
@@ -116,7 +118,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 @sync_to_async
                 def get_data():
                     return MessageSerializer(message.instance).data
-
                 await self.save_message(message=message)
                 await self.channel_layer.group_send(
                     self.group_name,
@@ -139,10 +140,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
         elif data['event'] == 'edit_message':
             message = data['message']
-
             msg = await self.get_message(message['id'])
             message = await self.edit(msg, data['message'])
-
             await self.channel_layer.group_send(
                 self.group_name,
                 {
@@ -220,14 +219,11 @@ class ChatCallConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         self.room_name = self.scope['url_route']['kwargs']['id']
         self.group_name = 'call_%s' % self.room_name
-
         self.sid = self.scope['user'].id
-
         await self.channel_layer.group_add(
             self.group_name,
             self.channel_name
         )
-
         await self.accept()
 
     async def disconnect(self, code):
@@ -252,6 +248,4 @@ class ChatCallConsumer(AsyncWebsocketConsumer):
         )
 
     async def call(self, data):
-        await self.send(text_data=json.dumps(
-            data
-        ))
+        await self.send(text_data=json.dumps(data))

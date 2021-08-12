@@ -1,8 +1,7 @@
 import {Component, Input, OnInit} from '@angular/core';
-import {IPost} from "./posts";
+import {IPost} from "../models/post.model";
 import {PostsService} from "../services/posts.service";
 import {Location, LocationStrategy, PathLocationStrategy} from "@angular/common";
-import {IUser} from "../models/account.model";
 import '@angular/localize/init'
 
 @Component({
