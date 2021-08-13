@@ -108,10 +108,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     return (ChatSerializer(chat).data, None)
                 except Exception as e:
                     return (None, e)
-            @sync_to_async
-            def get_all_chats_for_test():
-                return ChatSerializer(Chat.objects.all(), many=True).data
-            chats = await get_all_chats_for_test()
             chat, e = await get_chat()
             user = None
             if 'user' in self.scope:
@@ -127,7 +123,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             )
 
         elif data['event'] == 'send_message':
-            message = await self.create_message(data=data)
+            message = await self.create_message(data=data['message'])
             await self.channel_layer.group_send(
                 self.group_name,
                 {
@@ -137,25 +133,25 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 }
             )
 
-        elif data['event'] == 'reading_message':
+        elif data['event'] == 'writing_message':
             await self.channel_layer.group_send(
                 self.group_name,
                 {
                     'type': data['event'],
                     'event': data['event'],
-                    'reader': UserSerializer(self.scope['user']).data
+                    'writer': UserSerializer(self.scope['user']).data
                 }
             )
 
         elif data['event'] == 'edit_message':
-            msg = await self.get_message(data['message']['id'])
-            message = await self.edit(msg, data['message'])
+            message = await self.get_message(data['message']['id'])
+            edited_message = await self.edit(message, data['message'])
             await self.channel_layer.group_send(
                 self.group_name,
                 {
                     'type': data['event'],
                     'event': data['event'],
-                    'message': message
+                    'message': edited_message
                 }
             )
 
@@ -216,10 +212,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
             'message': event['message']
         }))
 
-    async def reading_message(self, event):
+    async def writing_message(self, event):
         await self.send(text_data=json.dumps({
             'event': event['event'],
-            'reader': event['reader']
+            'writer': event['writer']
         }))
 
     async def edit_message(self, event):

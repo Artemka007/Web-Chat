@@ -25,7 +25,7 @@ export class ChatComponent implements OnInit, AfterViewInit {
 
   @ViewChild('chatBody', {static: false}) chatBody?: ElementRef<HTMLDivElement>
   chatId: number = -1
-  reader: IUser | null = null
+  writer: IUser | null = null
   user: IUser | null = null
   chat: IChat | null = null
   otherUser: IUser | undefined = this.chat?.users.filter(i => i.id !== this.user?.id)[0]
@@ -71,7 +71,7 @@ export class ChatComponent implements OnInit, AfterViewInit {
         return true
       }))
       .subscribe(i => {
-        if (this.reader) this.reader = null
+        if (this.writer) this.writer = null
       })
   }
 
@@ -80,7 +80,7 @@ export class ChatComponent implements OnInit, AfterViewInit {
     this.message.date = new Date().toDateString()
     if (this.status === 'edit') this.edit()
     else if (this.status === 'reply') this.reply()
-    else this._chatService.message.next({event: "send_message", ...this.message})
+    else this._chatService.message.next({event: "send_message", message: this.message})
     this.message.body = ""
   }
 
@@ -88,8 +88,8 @@ export class ChatComponent implements OnInit, AfterViewInit {
     this.callIsOpen = false
   }
 
-  read() {
-    this._chatService.message.next({event: "reading_message"})
+  write() {
+    this._chatService.message.next({event: "writing_message"})
   }
 
   edit() {
@@ -259,8 +259,8 @@ export class ChatComponent implements OnInit, AfterViewInit {
           this.sendMessageHandle(data)
           break
         }
-        case 'reading_message': {
-          this.reader = data.reader
+        case 'writing_message': {
+          this.writer = data.writer
           break
         }
         case 'edit_message': {
