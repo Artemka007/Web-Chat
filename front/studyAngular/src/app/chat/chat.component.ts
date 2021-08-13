@@ -1,4 +1,4 @@
-import {AfterViewInit, Component, ElementRef, OnInit, ViewChild} from '@angular/core';
+import {AfterViewInit, Component, ElementRef, ErrorHandler, OnInit, ViewChild} from '@angular/core';
 import {UserService} from "../services/user.service";
 import {ChatService} from "../services/chat.service";
 import {IUser} from "../models/account.model";
@@ -219,8 +219,14 @@ export class ChatComponent implements OnInit, AfterViewInit {
     if (this.chatBody && this.chat) this.chatBody.nativeElement.scrollTop = this.chatBody.nativeElement.scrollHeight
   }
 
-  private sendChatHandle(data: any) {
-    this.chat && this.chat.chat_messages.push(data.message)
+  private sendMessageHandle(data: any) {
+    if (!data.message) {
+      console.error("Message in response is None!")
+    } else if (!this.chat) {
+      console.error("Chat is null!...")
+    } else {
+      this.chat.chat_messages.push(data.message)
+    }
     if (this.chatBody) interval(100).pipe(take(2)).subscribe(i => {
       this.chatBody!.nativeElement.scrollTop = this.chatBody!.nativeElement.scrollHeight
     })
@@ -250,7 +256,7 @@ export class ChatComponent implements OnInit, AfterViewInit {
           break
         }
         case 'send_message': {
-          this.sendChatHandle(data)
+          this.sendMessageHandle(data)
           break
         }
         case 'reading_message': {

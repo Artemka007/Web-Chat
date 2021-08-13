@@ -1,8 +1,9 @@
-from asyncio import events
 import json
 
 from asgiref.sync import sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
+from django.contrib.auth.models import User
+from rest_framework import serializers
 
 from account.serializer import UserSerializer
 from chat.models import Chat, Message
@@ -11,14 +12,6 @@ import random
 
 
 class ChatConsumer(AsyncWebsocketConsumer):
-
-    @sync_to_async
-    def save_message(self, message):
-        if message.is_valid():
-            message.save()
-        else:
-            print(message)
-
     @sync_to_async
     def update_message(self, message):
         if message.is_valid():
@@ -27,18 +20,19 @@ class ChatConsumer(AsyncWebsocketConsumer):
             print(message)
 
     @sync_to_async
-    def is_valid(self, message):
-        return message.is_valid()
-
-    @sync_to_async
     def create_message(self, data, instance=None):
+        message = None
+        serializer = None
         if instance:
-            m = MessageSerializer(data=data, instance=instance)
-            if m.is_valid():
-                m.save()
-                return m
-            return None
-        return CreateMessageSerializer(data=data)
+            serializer = MessageSerializer(data=data, instance=instance)
+            if serializer.is_valid():
+                serializer.save()
+                message = MessageSerializer(serializer.instance).data
+        serializer = CreateMessageSerializer(data=data)
+        if serializer.is_valid():
+            serializer.save()
+            message = MessageSerializer(serializer.instance).data
+        return message
 
     @sync_to_async
     def edit(self, message, data):
@@ -49,15 +43,28 @@ class ChatConsumer(AsyncWebsocketConsumer):
     def delete(self, message, for_all=None):
         message = Message.objects.filter(pk=message)
         message.update(is_remove=for_all)
-        return MessageSerializer(message[0]).data['id']
+        return MessageSerializer(message[0]).data
 
     @sync_to_async
     def get_message(self, pk: int):
         return Message.objects.filter(pk=pk)
 
     @sync_to_async
-    def forward_message(self, message_pk:int, message_body:str, chat_pk:int):
-        message = Message.objects.create()
+    def forward(self, message, chat_pk:int):
+        chat = Chat.objects.get(pk=chat_pk).pk 
+        serializer = CreateMessageSerializer(data={
+            "body": message["body"],
+            "audio_message": message["audio_message"],
+            "user": 1, 
+            "chat": chat,
+            "is_forward": True
+        })
+        if serializer.is_valid():
+            serializer.save()
+            print("SUCCESS")
+            return MessageSerializer(serializer.instance).data
+        else:
+            print("ERROR")
 
     @sync_to_async
     def reply_to_message(self, message: dict, pk: int):
@@ -89,64 +96,65 @@ class ChatConsumer(AsyncWebsocketConsumer):
         )
 
     async def receive(self, text_data=None, bytes_data=None):
-        if not self.scope['user']:
+        if not 'user' in self.scope:
             await self.disconnect(401)
         data = json.loads(text_data)
         if data['event'] == 'get_chat':
+            # todo: change database to postgresql
             @sync_to_async
             def get_chat():
-                return ChatSerializer(Chat.objects.get(pk=int(data['id']))).data
-
-            chat = await get_chat()
-
+                try:
+                    chat = Chat.objects.get(pk=int(data['id']))
+                    return (ChatSerializer(chat).data, None)
+                except Exception as e:
+                    return (None, e)
+            @sync_to_async
+            def get_all_chats_for_test():
+                return ChatSerializer(Chat.objects.all(), many=True).data
+            chats = await get_all_chats_for_test()
+            chat, e = await get_chat()
+            user = None
+            if 'user' in self.scope:
+                user = UserSerializer(self.scope['user']).data
             await self.channel_layer.group_send(
                 self.group_name,
                 {
-                    'type': 'get_chat',
-                    'event': 'get_chat',
+                    'type': data['event'],
+                    'event': data['event'],
                     'chat': chat,
-                    'user': UserSerializer(self.scope['user']).data
+                    'user': user
                 }
             )
 
         elif data['event'] == 'send_message':
             message = await self.create_message(data=data)
-            if not await self.is_valid(message=message):
-                # todo: ... any actions if message is not valid
-                pass
-            else:
-                @sync_to_async
-                def get_data():
-                    return MessageSerializer(message.instance).data
-                await self.save_message(message=message)
-                await self.channel_layer.group_send(
-                    self.group_name,
-                    {
-                        'type': 'send_message',
-                        'event': 'send_message',
-                        'message': await get_data()
-                    }
-                )
+            await self.channel_layer.group_send(
+                self.group_name,
+                {
+                    'type': data['event'],
+                    'event': data['event'],
+                    'message': message
+                }
+            )
 
         elif data['event'] == 'reading_message':
             await self.channel_layer.group_send(
                 self.group_name,
                 {
-                    'type': 'reading_message',
-                    'event': 'reading_message',
+                    'type': data['event'],
+                    'event': data['event'],
                     'reader': UserSerializer(self.scope['user']).data
                 }
             )
 
         elif data['event'] == 'edit_message':
-            message = data['message']
-            msg = await self.get_message(message['id'])
+            msg = await self.get_message(data['message']['id'])
             message = await self.edit(msg, data['message'])
             await self.channel_layer.group_send(
                 self.group_name,
                 {
-                    'type': 'edit_message',
-                    'event': 'edit_message',
+                    'type': data['event'],
+                    'event': data['event'],
                     'message': message
                 }
             )
@@ -154,22 +162,23 @@ class ChatConsumer(AsyncWebsocketConsumer):
         elif data['event'] == 'delete_message':
             ids = []
             for i in json.loads(data['messages']):
-                ids.append(await self.delete(i, data['for_all']))
+                ids.append(await self.delete(i, data['for_all'])['id'])
             await self.channel_layer.group_send(
                 self.group_name,
                 {
-                    'type': 'delete_message',
-                    'event': 'delete_message',
+                    'type': data['event'],
+                    'event': data['event'],
                     'for_all': data['for_all'],
                     'ids': ids
                 }
             )
 
         elif data['event'] == 'reply_message':
-            ms = data['message']
-            pk = data['pk']
-            m = await self.reply_to_message(message=ms, pk=pk)
-            if m is None:
+            message = await self.reply_to_message(
+                message=data['message'], 
+                pk=data['pk']
+            )
+            if message is None:
                 # todo: any actions
                 pass
             else:
@@ -178,9 +187,21 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     {
                         'type': 'send_message',
                         'event': 'send_message',
-                        'message': m
+                        'message': message
                     }
                 )
+
+        elif data['event'] == 'forward_message':
+            message = await self.forward(data['message'], data['chat_pk'])
+            await self.channel_layer.group_send(
+                self.group_name,
+                {
+                    'type': data['event'],
+                    'event': data['event'],
+                    'message': message,
+                    'chat_pk': data["chat_pk"]
+                }
+            )
 
     async def get_chat(self, event):
         await self.send(text_data=json.dumps({
@@ -214,6 +235,13 @@ class ChatConsumer(AsyncWebsocketConsumer):
             'ids': event['ids']
         }))
 
+    async def forward_message(self, event):
+        await self.send(text_data=json.dumps({
+            'event': event['event'],
+            'message': event['message'],
+            'chat_pk': event['chat_pk']
+        }))
+
 
 class ChatCallConsumer(AsyncWebsocketConsumer):
     async def connect(self):
@@ -226,7 +254,7 @@ class ChatCallConsumer(AsyncWebsocketConsumer):
         )
         await self.accept()
 
-    async def disconnect(self, code):
+    async def disconnect(self, code=500):
         await self.channel_layer.group_discard(
             self.group_name,
             self.channel_name
